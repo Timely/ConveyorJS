@@ -1,0 +1,21 @@
+{
+  "name": "conveyor",
+  "description": "ConveyorJS is a normalized model interface that can be used with any application in order to maintain state across multiple APIs.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": "https://github.com/Timely/ConveyorJS",
+  "dependencies": {},
+  "devDependencies": {
+    "chai": "*",
+    "grunt": "*",
+    "grunt-browserify": "^4.0.1",
+    "grunt-contrib-coffee": "*",
+    "grunt-contrib-concat": "^0.5.1",
+    "grunt-contrib-uglify": "*",
+    "grunt-contrib-watch": "^0.6.1",
+    "grunt-mocha-test": "*",
+    "matchdep": "*",
+    "mocha": "*",
+    "sinon": "*"
+  }
+}
