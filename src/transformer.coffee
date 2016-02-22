@@ -1,6 +1,6 @@
 class ConveyorTransformer extends ConveyorBase
   constructor: (opts)->
-    @_setDefaults
+    @$$setDefaults
       _applier: null
       models: {}
       _publisher: null
@@ -18,10 +18,14 @@ class ConveyorTransformer extends ConveyorBase
   $apply: (data,belt)->
     if @_applier
       @_applier.call belt, data
+    else
+      belt.next data
     
   $publish: (data,belt)->
     if @_publisher
       @_publisher.call belt, data
+    else
+      belt.next data
 
 
 root = exports ? window

@@ -1,67 +1,90 @@
 (function() {
   var ConveyorBase, ConveyorUtil,
+    slice = [].slice,
     extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
     hasProp = {}.hasOwnProperty;
 
   ConveyorUtil = (function() {
     function ConveyorUtil() {}
 
-    ConveyorUtil.prototype._arrayForEach = function(a, cb) {
+    ConveyorUtil.extend = function() {
+      var base, ext, i, len, obj, x;
+      base = arguments[0], ext = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+      base = this.obj(base);
+      for (i = 0, len = ext.length; i < len; i++) {
+        obj = ext[i];
+        if (typeof obj === 'object') {
+          for (x in obj) {
+            base[x] = obj[x];
+          }
+        }
+      }
+      return base;
+    };
+
+    ConveyorUtil.obj = function(val, def) {
+      if (typeof val === 'object') {
+        return val;
+      }
+      if (typeof def === 'object') {
+        return def;
+      }
+      return {};
+    };
+
+    ConveyorUtil.prototype.$$arrayForEach = function(a, cb) {
       if (!Array.isArray(a)) {
-        throw "_arrayForEach expects an array, given: " + (typeof a);
+        throw "$arrayForEach expects an array, given: " + (typeof a);
       }
       return a.length;
     };
 
-    ConveyorUtil.makePromise = function(obj) {
-      obj.prototype.__pr_util = function() {
-        if (this._resolvers == null) {
-          this._resolvers = [];
-        }
-        if (this._rejecters == null) {
-          return this._rejecters = [];
-        }
-      };
-      obj.prototype.resolve = function() {
-        var fn, i, len, ref, results;
-        this.__pr_util();
-        ref = this._resolvers;
-        results = [];
-        for (i = 0, len = ref.length; i < len; i++) {
-          fn = ref[i];
-          results.push(fn.apply(this, arguments));
-        }
-        return results;
-      };
-      obj.prototype.reject = function() {
-        var fn, i, len, ref, results;
-        this.__pr_util();
-        ref = this._rejecters;
-        results = [];
-        for (i = 0, len = ref.length; i < len; i++) {
-          fn = ref[i];
-          results.push(fn.apply(this, arguments));
-        }
-        return results;
-      };
-      obj.prototype.then = function(success, fail) {
-        this.__pr_util();
-        if (success) {
-          this._resolvers.push(success);
-        }
-        if (fail) {
-          this._rejecters.push(fail);
-        }
-        return this;
-      };
-      return obj.prototype["catch"] = function(fail) {
-        this.__pr_util();
-        if (fail) {
-          this._rejecters.push(fail);
-        }
-        return this;
-      };
+    ConveyorUtil.prototype.$on = function(ev, handler) {
+      if (this.__eventHandlers == null) {
+        this.__eventHandlers = {};
+      }
+      if (this.__eventHandlers[ev] == null) {
+        this.__eventHandlers[ev] = [];
+      }
+      return this.__eventHandlers[ev].push(handler);
     };
+
+    ConveyorUtil.prototype.$trigger = function() {
+      var args, ev, i, len, ref, results, x;
+      ev = arguments[0], args = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+      if (this.__eventHandlers == null) {
+        return;
+      }
+      if (this.__eventHandlers[ev] == null) {
+        return;
+      }
+      ref = this.__eventHandlers[ev];
+      results = [];
+      for (i = 0, len = ref.length; i < len; i++) {
+        x = ref[i];
+        if (typeof x === 'function') {
+          results.push(x.apply(this, args));
+        } else {
+          results.push(void 0);
+        }
+      }
+      return results;
+    };
+
+    ConveyorUtil.prototype.$$interpolate = (function() {
+      var rc;
+      rc = {
+        '\n': '\\n',
+        '"': '\"',
+        '\u2028': '\\u2028',
+        '\u2029': '\\u2029'
+      };
+      return function(str) {
+        return new Function('o', 'return "' + str.replace(/["\n\r\u2028\u2029]/g, function($0) {
+          return rc[$0];
+        }).replace(/\{([\s\S]+?)\}/g, '" + o["$1"] + "') + '";');
+      };
+    })();
 
     return ConveyorUtil;
 
@@ -74,7 +97,17 @@
       return ConveyorBase.__super__.constructor.apply(this, arguments);
     }
 
-    ConveyorBase.prototype._setDefaults = function(base, opts) {
+    ConveyorBase.prototype.$$apply = function(fn, args) {
+      return this[fn].apply(this, args);
+    };
+
+    ConveyorBase.prototype.$$call = function() {
+      var args, fn;
+      fn = arguments[0], args = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+      return this[fn].apply(this, args);
+    };
+
+    ConveyorBase.prototype.$$setDefaults = function(base, opts) {
       var results, x;
       if (typeof opts === 'object') {
         for (x in opts) {
@@ -142,7 +175,7 @@
     extend(ConveyorTransformer, superClass);
 
     function ConveyorTransformer(opts) {
-      this._setDefaults({
+      this.$$setDefaults({
         _applier: null,
         models: {},
         _publisher: null
@@ -170,12 +203,16 @@
     ConveyorTransformer.prototype.$apply = function(data, belt) {
       if (this._applier) {
         return this._applier.call(belt, data);
+      } else {
+        return belt.next(data);
       }
     };
 
     ConveyorTransformer.prototype.$publish = function(data, belt) {
       if (this._publisher) {
         return this._publisher.call(belt, data);
+      } else {
+        return belt.next(data);
       }
     };
 
@@ -190,13 +227,72 @@
 }).call(this);
 
 (function() {
+  var ConveyorFacade;
+
+  ConveyorFacade = (function() {
+    ConveyorFacade.prototype.$$transformer = null;
+
+    function ConveyorFacade($model, transformer) {
+      this.$model = $model;
+      this.$$transformer = Conveyor.getTransformer(transformer);
+      this.$$apply();
+    }
+
+    ConveyorFacade.prototype.$$apply = function() {
+      var key;
+      for (key in this.$model.data) {
+        this[key] = this.$model.get(key);
+        if (this[key] instanceof ConveyorModel) {
+          this[key] = new ConveyorFacade(this[key]);
+        }
+      }
+      if (this.$$transformer) {
+        ConveyorBelt.run(this, this.$$transformer, 'apply');
+      }
+      return this;
+    };
+
+    ConveyorFacade.prototype.$commit = function() {
+      var key, results;
+      results = [];
+      for (key in this) {
+        if (key.indexOf('$') === 0) {
+          continue;
+        }
+        results.push(this.$model.set(key, this[key]));
+      }
+      return results;
+    };
+
+    ConveyorFacade.prototype.$save = function(opts) {
+      this.$commit();
+      return this.$model.save(opts).then((function(_this) {
+        return function() {
+          return _this.$$apply();
+        };
+      })(this));
+    };
+
+    ConveyorFacade.prototype.$delete = function() {
+      return this.$model.remove();
+    };
+
+    return ConveyorFacade;
+
+  })();
+
+  (typeof exports !== "undefined" && exports !== null ? exports : this).ConveyorFacade = ConveyorFacade;
+
+}).call(this);
+
+(function() {
   var ConveyorBelt;
 
   ConveyorBelt = (function() {
     function ConveyorBelt(data, transformers, direction) {
       this.promise = new ConveyorPromise;
       this.data = data;
-      this.transformers = transformers;
+      this.transformers = transformers instanceof Array && transformers || [transformers];
       this.direction = direction || 'apply';
       this.pos = -1;
       this.status = -1;
@@ -287,15 +383,37 @@
     extend(Conveyor, superClass);
 
     function Conveyor() {
-      this._setDefaults({
-        transformers: {},
-        models: {},
-        interfaces: {}
-      });
+      return Conveyor.__super__.constructor.apply(this, arguments);
     }
 
-    Conveyor.prototype.registerTransformer = function(name) {
-      return this.transformers[name] = new ConveyorTransformer;
+    Conveyor.transformers = {};
+
+    Conveyor.models = {};
+
+    Conveyor.interfaces = {};
+
+    Conveyor.registerTransformer = function(name, apply, publish) {
+      return this.transformers[name] = this.Transformer(apply, publish);
+    };
+
+    Conveyor.getTransformer = function(nameOrFunc) {
+      if (typeof nameOrFunc === 'function') {
+        return nameOrFunc;
+      } else if (this.transformers[nameOrFunc]) {
+        return this.transformers[nameOrFunc];
+      }
+    };
+
+    Conveyor.Transformer = function(apply, publish) {
+      var tr;
+      tr = new ConveyorTransformer;
+      if (typeof apply === 'function') {
+        tr.onApply(apply);
+      }
+      if (typeof publish === 'function') {
+        tr.onPublish(publish);
+      }
+      return tr;
     };
 
     Conveyor.prototype.registerModel = function() {};
@@ -306,21 +424,27 @@
 
   })(ConveyorBase);
 
-  (typeof exports !== "undefined" && exports !== null ? exports : this).Conveyor = Conveyor;
+  (typeof exports !== "undefined" && exports !== null ? exports : this).Conveyor = (typeof exports !== "undefined" && exports !== null ? exports : this).CV = Conveyor;
 
 }).call(this);
 
 (function() {
-  var ConveyorFacade;
+  var ConveyorAngularFacade,
+    extend = function(child, parent) { for (var key in parent) { if (hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor(); child.__super__ = parent.prototype; return child; },
+    hasProp = {}.hasOwnProperty;
 
-  ConveyorFacade = (function() {
-    function ConveyorFacade() {}
+  ConveyorAngularFacade = (function(superClass) {
+    extend(ConveyorAngularFacade, superClass);
 
-    return ConveyorFacade;
+    function ConveyorAngularFacade() {
+      return ConveyorAngularFacade.__super__.constructor.apply(this, arguments);
+    }
 
-  })();
+    return ConveyorAngularFacade;
 
-  (typeof exports !== "undefined" && exports !== null ? exports : this).ConveyorFacade = ConveyorFacade;
+  })(ConveyorFacade);
+
+  (typeof exports !== "undefined" && exports !== null ? exports : this).ConveyorAngularFacade = ConveyorAngularFacade;
 
 }).call(this);
 
@@ -333,8 +457,9 @@
     extend(ConveyorHttpInterface, superClass);
 
     function ConveyorHttpInterface(options) {
-      this._setDefaults({
+      this.$$setDefaults({
         endpoint: null,
+        endpointExt: null,
         actions: [],
         transformers: [],
         listTransformers: []
@@ -345,11 +470,12 @@
 
     ConveyorHttpInterface.prototype.remove = function() {};
 
-    ConveyorHttpInterface.prototype.list = function(args) {
+    ConveyorHttpInterface.prototype.list = function(conf) {
       var path, promise;
+      conf = ConveyorUtil.obj(conf);
       promise = new ConveyorPromise;
-      path = this.endpoint;
-      this._req('get', path, args).then((function(_this) {
+      path = this.$$path('list')(ConveyorUtil.obj(conf.params));
+      this.$$req('get', path, ConveyorUtil.obj(conf.data)).then((function(_this) {
         return function(data) {
           return ConveyorBelt.run(data, _this.listTransformers, 'apply').then(function(value) {
             if (!(value instanceof Array)) {
@@ -365,15 +491,84 @@
       return promise;
     };
 
-    ConveyorHttpInterface.prototype.save = function(data) {};
+    ConveyorHttpInterface.prototype.save = function(data, conf) {
+      var promise;
+      promise = new ConveyorPromise;
+      ConveyorBelt.run(data, this.listTransformers, 'publish').then((function(_this) {
+        return function(data) {
+          var params, path;
+          params = ConveyorUtil.extend({}, data, conf.params);
+          path = _this.$$path('save')(params);
+          console.info(data);
+          return _this.$$req('put', path, data).then(function(data) {
+            console.info('saved', data);
+            return ConveyorBelt.run(data, _this.transformers, 'apply').then(promise);
+          }, function(xhr, status, err) {
+            return promise.reject(err);
+          });
+        };
+      })(this), function(err) {
+        return promise.reject(err);
+      });
+      return promise;
+    };
 
-    ConveyorHttpInterface.prototype._buildPath = function() {};
+    ConveyorHttpInterface.prototype.create = function(data, conf) {
+      var promise;
+      promise = new ConveyorPromise;
+      ConveyorBelt.run(data, this.listTransformers, 'publish').then((function(_this) {
+        return function(data) {
+          var params, path;
+          params = ConveyorUtil.extend({}, data, conf.params);
+          path = _this.$$path('create')(params);
+          console.info('creating with', data);
+          return _this.$$req('post', path, data).then(function(data) {
+            return ConveyorBelt.run(data, _this.transformers, 'apply').then(promise);
+          }, function(xhr, status, err) {
+            return promise.reject(err);
+          });
+        };
+      })(this), function(err) {
+        return promise.reject(err);
+      });
+      return promise;
+    };
 
-    ConveyorHttpInterface.prototype._req = function(method, path, args) {
+    ConveyorHttpInterface.prototype.$$path = function(method) {
+      var out;
+      out = '';
+      if (typeof this.endpoint === 'object') {
+        if (this.endpoint[method] != null) {
+          out = this.endpoint[method];
+        } else if (['remove', 'save'].indexOf(this.endpoint[method]) !== -1 && (this.endpoint['fetch'] != null)) {
+          out = this.endpoint['fetch'];
+        } else if (method === 'create' && (this.endpoint['list'] != null)) {
+          out = this.endpoint['list'];
+        } else {
+          throw "No valid endpoint for " + method + ".";
+        }
+      } else if (typeof this.endpoint === 'string') {
+        if (['list', 'create'].indexOf(method) !== -1) {
+          out = this.endpoint;
+        } else {
+          out = this.endpoint + '/{id}';
+        }
+      } else {
+        throw "No valid endpoint for " + method + ".";
+      }
+      if ((this.endpointExt != null) && typeof this.endpointExt === 'string') {
+        out += this.endpointExt;
+      }
+      return this.$$interpolate(out);
+    };
+
+    ConveyorHttpInterface.prototype.$$req = function(method, path, args) {
       return $.ajax({
         url: path,
         method: method,
-        data: args
+        data: method !== 'get' && JSON.stringify(args) || args,
+        contentType: 'application/json',
+        dataType: 'json'
       });
     };
 
@@ -394,7 +589,8 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
  */
 
 (function() {
-  var ConveyorModel, root;
+  var ConveyorModel, root,
+    slice = [].slice;
 
   ConveyorModel = (function() {
 
@@ -404,42 +600,66 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
      */
     ConveyorModel._refCount = 0;
 
-    function ConveyorModel(data) {
+    function ConveyorModel(data, conf) {
       this._ref = this.constructor._refCount++;
       this.data = {};
+      this.conf = ConveyorUtil.obj(conf);
       this.interfaces = {};
       this.sync(data);
     }
 
-    ConveyorModel.prototype.save = function() {
-
-      /* Save documentation goes here. */
+    ConveyorModel.prototype.save = function(opts) {
+      var data;
+      opts = ConveyorUtil.extend({}, this.conf, opts);
+      data = this.$publish(opts.changed_only && true || false);
+      if (this.getPrimaryKey()) {
+        return this.allInterfaces('save', data, opts).then((function(_this) {
+          return function(data) {
+            return _this.sync(data);
+          };
+        })(this));
+      } else {
+        return this.allInterfaces('create', data, opts).then((function(_this) {
+          return function(data) {
+            console.info('syncing new data', data);
+            return _this.sync(data[0]);
+          };
+        })(this));
+      }
     };
 
     ConveyorModel.prototype.remove = function() {};
 
-    ConveyorModel.list = function(params) {
-      return this.firstInterface('list').list(params).then((function(_this) {
+    ConveyorModel.prototype.getPrimaryKey = function() {
+      return this.get(this.constructor.primaryKey);
+    };
+
+    ConveyorModel.list = function(args, conf) {
+      if (typeof conf !== 'object') {
+        conf = {};
+      }
+      conf.data = args;
+      return this.firstInterface('list', conf).then((function(_this) {
         return function(arr) {
-          var hm, i, item, len, out;
+          var hm, item, j, len, out;
           out = [];
-          for (i = 0, len = arr.length; i < len; i++) {
-            item = arr[i];
-            out.push(_this.sync(item));
+          for (j = 0, len = arr.length; j < len; j++) {
+            item = arr[j];
+            out.push(_this.sync(item, conf));
           }
           return hm = _this._collectionize(out);
         };
       })(this));
     };
 
-    ConveyorModel.sync = function(data) {
+    ConveyorModel.sync = function(data, conf) {
       var pk;
       pk = data[this.primaryKey];
       if (!pk) {
         throw "You can only sync models with a primary key.";
       }
       if (this.index[this.name + "_" + pk] == null) {
-        return this.index[this.name + "_" + pk] = new this.$self(data);
+        return this.index[this.name + "_" + pk] = new this.$self(data, conf);
       } else {
         return this.index[this.name + "_" + pk].sync(data);
       }
@@ -447,12 +667,20 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
 
     ConveyorModel.prototype.sync = function(data) {
       var conf, key, val;
-      for (key in data) {
-        val = data[key];
+      data = ConveyorUtil.obj(data);
+      for (key in this.fields) {
         conf = this.fields[key];
-        if (conf != null) {
-          if (ConveyorValue[conf.type] != null) {
+        if (data[key] == null) {
+          continue;
+        }
+        val = data[key];
+        if ((conf != null ? conf.type : void 0) != null) {
+          if (conf.type instanceof ConveyorValueCore) {
+            this.data[key] = new conf.type;
+          } else if (ConveyorValue[conf.type] != null) {
             this.data[key] = new ConveyorValue[conf.type](val, this, conf);
+          } else {
+            console.error('ConveyorModelValue::' + conf.type + ' is not a valid value type.');
           }
         }
         if (this.data[key] == null) {
@@ -460,6 +688,24 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
         }
       }
       return this;
+    };
+
+    ConveyorModel.prototype.$publish = function(changed) {
+      var key, out;
+      if (changed == null) {
+        changed = false;
+      }
+      out = {};
+      for (key in this.data) {
+        if (changed) {
+          if (this.data[key].dirty) {
+            out[key] = this.data[key].$publish();
+          }
+        } else {
+          out[key] = this.data[key].$publish();
+        }
+      }
+      return out;
     };
 
     ConveyorModel.prototype.get = function(key) {
@@ -471,18 +717,41 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
     };
 
     ConveyorModel.prototype.set = function(key, value) {
+      var conf;
       if (this.data[key]) {
         return this.data[key].set(value);
-      } else {
-        return null;
+      } else if (this.fields[key] != null) {
+        conf = this.fields[key];
+        if (conf.type instanceof ConveyorValueCore) {
+          return this.data[key] = new conf.type;
+        } else if (ConveyorValue[conf.type] != null) {
+          return this.data[key] = new ConveyorValue[conf.type](value, this, conf);
+        } else {
+          return console.error('ConveyorModelValue::' + conf.type + ' is not a valid value type.');
+        }
       }
     };
 
+    ConveyorModel.prototype.$facade = function(tr) {
+      return new ConveyorFacade(this, tr);
+    };
+
     ConveyorModel._collectionize = function(arr) {
+      var out;
       arr.$changed = function() {
         return this.filter(function(model) {
           return model.dirty;
         });
+      };
+      out = [];
+      arr.$facade = function(tr) {
+        var i, j, len;
+        out = [];
+        for (j = 0, len = this.length; j < len; j++) {
+          i = this[j];
+          out.push(new ConveyorFacade(i, tr));
+        }
+        return out;
       };
       return arr;
     };
@@ -494,15 +763,33 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
     };
 
     ConveyorModel.prototype.addInterface = function(name, $interface) {
-      return this.interfaces[name] = $interface;
+      return this.constructor.interfaces[name] = $interface;
     };
 
-    ConveyorModel.firstInterface = function(action) {
-      var $intfc, x;
+    ConveyorModel.prototype.allInterfaces = function() {
+      var $intfc, action, all, args, interfaces, x;
+      action = arguments[0], args = 2 <= arguments.length ? slice.call(arguments, 1) : [];
+      interfaces = ConveyorUtil.obj(this.constructor.interfaces);
+      all = [];
+      for (x in interfaces) {
+        $intfc = interfaces[x];
+        if ($intfc.actions.indexOf(action) !== -1) {
+          all.push($intfc.$$apply(action, args));
+        }
+      }
+      if (!all.length) {
+        throw "No interface available with the ability to: " + action;
+      }
+      return ConveyorPromise.aggregate(all);
+    };
+
+    ConveyorModel.firstInterface = function() {
+      var $intfc, action, args, x;
+      action = arguments[0], args = 2 <= arguments.length ? slice.call(arguments, 1) : [];
       for (x in this.interfaces) {
         $intfc = this.interfaces[x];
         if ($intfc.actions.indexOf(action) !== -1) {
-          return $intfc;
+          return $intfc.$$apply(action, args);
         }
       }
       throw "No interface available with the ability to: " + action;
@@ -565,17 +852,31 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
     }
 
     ConveyorValueCore.prototype.get = function() {
-      var val;
-      val = null;
-      this.$publish().then(function(value) {
-        console.log('got', value);
-        return val = value;
-      });
-      return val;
+      return this.current;
     };
 
     ConveyorValueCore.prototype.set = function(value) {
       return this.$apply(value);
+    };
+
+    ConveyorValueCore.onApply = function(fn) {
+      var tr;
+      tr = Conveyor.Transformer(fn);
+      if (this.transformers.length) {
+        return this.transformers.push(tr);
+      } else {
+        return this.transformers = [tr];
+      }
+    };
+
+    ConveyorValueCore.onPublish = function(fn) {
+      var tr;
+      tr = Conveyor.Transformer(null, fn);
+      if (this.transformers.length) {
+        return this.transformers.push(tr);
+      } else {
+        return this.transformers = [tr];
+      }
     };
 
     ConveyorValueCore.prototype.$apply = function(value, force) {
@@ -585,10 +886,8 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
       }
       this.raw = value;
       original = this.current;
-      console.info('$apply', value);
       return ConveyorBelt.run(this, this.constructor.transformers, 'apply').then((function(_this) {
         return function(value) {
-          console.info('$applied', value);
           if (value instanceof ConveyorValueCore) {
             _this.current = value.raw;
           } else {
@@ -607,16 +906,18 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
     };
 
     ConveyorValueCore.prototype.$publish = function() {
-      return ConveyorBelt.run(this, this.constructor.transformers, 'publish').then(function(value) {
-        console.info('$publish', value);
+      var out;
+      out = null;
+      ConveyorBelt.run(this, this.constructor.transformers, 'publish').then(function(value) {
         if (value instanceof ConveyorValueCore) {
-          return value.current;
+          return out = value.current;
         } else {
-          return value;
+          return out = value;
         }
       }, function(err) {
         return this.exception(err);
       });
+      return out;
     };
 
     ConveyorValueCore.prototype.exception = function(message) {
@@ -637,23 +938,21 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
       return String.__super__.constructor.apply(this, arguments);
     }
 
-    String.transformers = [
-      (new ConveyorTransformer).onApply(function(value) {
-        if (typeof value.raw === 'string') {
-          return this.next(value.raw);
-        }
-        if (!value.raw) {
-          return this.next('');
-        }
-        if (typeof value.raw === 'boolean') {
-          return this.next(value.raw && (value.conf.boolTrue || '1') || (value.conf.boolFalse || '0'));
-        }
-        if (value.raw.toString != null) {
-          return this.next(value.raw.toString());
-        }
-        return value.exception("ConveyorValue.String - Cannot convert value to string.");
-      })
-    ];
+    String.onApply(function(value) {
+      if (typeof value.raw === 'string') {
+        return this.next(value.raw);
+      }
+      if (!value.raw) {
+        return this.next('');
+      }
+      if (typeof value.raw === 'boolean') {
+        return this.next(value.raw && (value.conf.boolTrue || '1') || (value.conf.boolFalse || '0'));
+      }
+      if (value.raw.toString != null) {
+        return this.next(value.raw.toString());
+      }
+      return value.exception("ConveyorValue.String - Cannot convert value to string.");
+    });
 
     return String;
 
@@ -666,26 +965,24 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
       return Number.__super__.constructor.apply(this, arguments);
     }
 
-    Number.transformers = [
-      (new ConveyorTransformer).onApply(function(value) {
-        if (typeof value.raw === 'boolean') {
-          return this.next(value.raw && 1 || 0);
+    Number.onApply(function(value) {
+      if (typeof value.raw === 'boolean') {
+        return this.next(value.raw && 1 || 0);
+      }
+      if (typeof value.raw === 'string') {
+        if (value.raw.length === 0) {
+          return this.next(0);
         }
-        if (typeof value.raw === 'string') {
-          if (value.raw.length === 0) {
-            return this.next(0);
-          }
-          if (value.raw.match(/[^0-9$%#,.\s\r\n]/g)) {
-            value.raw.exception("Cannot convert `" + value.raw + "` to a number.");
-          }
-          return this.next(parseFloat(value.raw.replace(/[^0-9\.]/g, '')));
+        if (value.raw.match(/[^0-9$%#,.\s\r\n]/g)) {
+          value.raw.exception("Cannot convert `" + value.raw + "` to a number.");
         }
-        if (value.raw instanceof Number || typeof value.raw === 'number') {
-          return this.next(value.raw);
-        }
-        return value.exception("Cannot convert `" + value.raw + "` to a number.");
-      })
-    ];
+        return this.next(parseFloat(value.raw.replace(/[^0-9\.]/g, '')));
+      }
+      if (value.raw instanceof Number || typeof value.raw === 'number') {
+        return this.next(value.raw);
+      }
+      return value.exception("Cannot convert `" + value.raw + "` to a number.");
+    });
 
     return Number;
 
@@ -698,27 +995,43 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
       return Boolean.__super__.constructor.apply(this, arguments);
     }
 
-    Boolean.transformers = [
-      (new ConveyorTransformer).onApply(function(value) {
-        if (typeof value.raw === 'boolean') {
-          return this.next(value.raw);
+    Boolean.onApply(function(value) {
+      if (typeof value.raw === 'boolean') {
+        return this.next(value.raw);
+      }
+      if (typeof value.raw === 'string') {
+        if (['yes', 'true', '1'].indexOf(value.raw) !== -1) {
+          return this.next(true);
         }
-        if (typeof value.raw === 'string') {
-          if (['yes', 'true', '1'].indexOf(value.raw) !== -1) {
-            return this.next(true);
-          }
-          if (['no', 'false', '0'].indexOf(value.raw) !== -1) {
-            return this.next(false);
-          }
+        if (['no', 'false', '0'].indexOf(value.raw) !== -1) {
+          return this.next(false);
         }
-        if (typeof value.raw === 'number') {
-          return this.next(value.raw !== 0 && true || false);
-        }
-        return value.exception("Cannot convert `" + value.raw + "` to a boolean.");
-      })
-    ];
+      }
+      if (typeof value.raw === 'number') {
+        return this.next(value.raw !== 0 && true || false);
+      }
+      return value.exception("Cannot convert `" + value.raw + "` to a boolean.");
+    });
 
     return Boolean;
+
+  })(ConveyorValueCore);
+
+  ConveyorValue.Model = (function(superClass) {
+    extend(Model, superClass);
+
+    function Model() {
+      return Model.__super__.constructor.apply(this, arguments);
+    }
+
+    Model.onApply(function(value) {
+      if (typeof value.raw === 'object') {
+        return this.next(new value.conf.model(value.raw));
+      }
+      return this.next(value.raw);
+    });
+
+    return Model;
 
   })(ConveyorValueCore);
 
@@ -733,6 +1046,8 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
   })();
 
   root = typeof exports !== "undefined" && exports !== null ? exports : window;
+
+  root.ConveyorValueCore = ConveyorValueCore;
 
   root.ConveyorValue = ConveyorValue;
 
@@ -753,6 +1068,7 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
       }
       this.resolvers = [];
       this.rejecters = [];
+      this.$list = [];
       this.next = null;
       this.status = 0;
       this.value = null;
@@ -822,6 +1138,7 @@ Documentation generated by [CoffeeDoc](http://github.com/omarkhan/coffeedoc)
     ConveyorPromise.prototype.resolve = function(value) {
       var fn, j, len, r, ref;
       if (this.status !== 0) {
+        console.error('test');
         throw "This promise is already " + (this.status === -1 && 'rejected' || 'resolved') + ". Cannot resolve.";
       }
       this.value = value;

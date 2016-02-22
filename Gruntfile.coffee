@@ -23,6 +23,7 @@ module.exports = (grunt) ->
             'src/base.coffee'
             'src/interface.coffee'
             'src/transformer.coffee'
+            'src/facade.coffee'
             'src/*.coffee'
           ]
       playground:

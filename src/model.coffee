@@ -12,44 +12,72 @@ class ConveyorModel
   ###
   # @data: test: true
   @_refCount = 0
-  constructor: (data)->
+  constructor: (data,conf)->
     @_ref = @constructor._refCount++
     @data = {}
+    @conf = ConveyorUtil.obj conf
     @interfaces = {}
     # console.log @
     @sync(data)
 
-  save: ()->
-    ### Save documentation goes here. ###
+  save: (opts)->
+    opts = ConveyorUtil.extend {}, @conf, opts 
+    data = @$publish(opts.changed_only && true || false)
+    if @getPrimaryKey()
+      @allInterfaces('save', data, opts).then (data)=>
+        @sync data
+    else
+      @allInterfaces('create', data, opts).then (data)=>
+        console.info 'syncing new data',data
+        @sync data[0]
   remove: ()->
-  @list: (params)->
+  getPrimaryKey: ->
+    @get @constructor.primaryKey
+  @list: (args, conf)->
+    conf = {} if typeof conf isnt 'object'
+    conf.data = args
     # returns a conveyor belt
-    @firstInterface('list').list(params).then (arr)=>
+    @firstInterface('list', conf).then (arr)=>
       out = []
       # console.info arr
       for item in arr
-        out.push @sync item
+        out.push @sync item, conf
       hm = @_collectionize out
 
-  @sync: (data)->
+  @sync: (data,conf)->
     pk = data[@primaryKey]
     if not pk
       throw "You can only sync models with a primary key."
     if not @index["#{@name}_#{pk}"]?
-      return @index["#{@name}_#{pk}"] = new @$self data
+      return @index["#{@name}_#{pk}"] = new @$self data, conf
     else
       return @index["#{@name}_#{pk}"].sync data
   sync: (data)->
-    for key of data
-      val = data[key]
+    data = ConveyorUtil.obj data
+    for key of @fields
       conf = @fields[key]
-      if conf?
-        if ConveyorValue[conf.type]?
+      continue if not data[key]?
+      val = data[key]
+      if conf?.type?
+        if conf.type instanceof ConveyorValueCore
+          @data[key] = new conf.type
+        else if ConveyorValue[conf.type]?
           @data[key] = new ConveyorValue[conf.type](val,@,conf)
+        else
+          console.error 'ConveyorModelValue::'+conf.type+' is not a valid value type.'
 
       if not @data[key]?
         console.warn 'ConveyorModel::constructor ignoring key: ',key,data[key]
     @
+  $publish: (changed=false)->
+    out = {}
+    for key of @data
+      if changed
+        if @data[key].dirty
+          out[key] = @data[key].$publish()
+      else
+        out[key] = @data[key].$publish()
+    out
   get: (key)->
     if @data[key]
       return @data[key].get()
@@ -58,26 +86,51 @@ class ConveyorModel
   set: (key,value)->
     if @data[key]
       return @data[key].set(value)
-    else
-      return null
+    else if @fields[key]?
+      conf = @fields[key]
+      if conf.type instanceof ConveyorValueCore
+        @data[key] = new conf.type
+      else if ConveyorValue[conf.type]?
+        @data[key] = new ConveyorValue[conf.type](value,@,conf)
+      else
+        console.error 'ConveyorModelValue::'+conf.type+' is not a valid value type.'
+  $facade: (tr)->
+    new ConveyorFacade @, tr
     
   @_collectionize: (arr)->
     arr.$changed = ->
       @.filter (model)->
         model.dirty
+    out = []
+    arr.$facade = (tr)->
+      out = []
+      for i in @
+        out.push new ConveyorFacade i, tr
+      out
     arr
 
   @create: (params)->
   @addInterface: (name,$interface)->
     @interfaces[name] = $interface;
   addInterface: (name,$interface)->
-    @interfaces[name] = $interface;
+    @constructor.interfaces[name] = $interface;
 
-  @firstInterface: (action)->
+  allInterfaces: (action, args...)->
+    interfaces = ConveyorUtil.obj @constructor.interfaces
+    all = []
+    for x of interfaces
+      $intfc = interfaces[x]
+      if $intfc.actions.indexOf(action) isnt -1
+        all.push $intfc.$$apply action, args
+    if not all.length
+      throw "No interface available with the ability to: #{action}"
+    ConveyorPromise.aggregate all
+
+  @firstInterface: (action,args...)->
     for x of @interfaces
       $intfc = @interfaces[x]
       if $intfc.actions.indexOf(action) isnt -1
-        return $intfc
+        return $intfc.$$apply action, args
     throw "No interface available with the ability to: #{action}"
 
 

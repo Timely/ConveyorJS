@@ -1,37 +1,55 @@
 class ConveyorUtil
-  _arrayForEach: (a,cb)->
+  @extend: (base, ext...)->
+    base = @obj base
+    for obj in ext
+      if typeof obj is 'object'
+        for x of obj
+          base[x] = obj[x];
+    return base
+  @obj: (val, def)->
+    if typeof val is 'object'
+      return val
+    if typeof def is 'object'
+      return def
+    return {}
+  $$arrayForEach: (a,cb)->
     if not Array.isArray a
-      throw "_arrayForEach expects an array, given: #{typeof a}"
+      throw "$arrayForEach expects an array, given: #{typeof a}"
     a.length
-  @makePromise: (obj)->
-    obj::__pr_util = ->
-      if not @_resolvers?
-        @_resolvers = []
-      if not @_rejecters?
-        @_rejecters = []
-    obj::resolve = ->
-      @__pr_util()
-      for fn in @_resolvers
-        fn.apply @, arguments
-    obj::reject = ->
-      @__pr_util()
-      for fn in @_rejecters
-        fn.apply @, arguments
-    obj::then = (success, fail)->
-      @__pr_util()
-      if success
-        @_resolvers.push success
-      if fail
-        @_rejecters.push fail
-      return @
-    obj::catch = (fail)->
-      @__pr_util()
-      if fail
-        @_rejecters.push fail
-      return @
+  $on: (ev, handler)->
+    if not @__eventHandlers?
+      @__eventHandlers = {}
+    if not @__eventHandlers[ev]?
+      @__eventHandlers[ev] = []
+    @__eventHandlers[ev].push handler
+
+  $trigger: (ev, args...)->
+    if not @__eventHandlers?
+      return
+    if not @__eventHandlers[ev]?
+      return
+    for x in @__eventHandlers[ev]
+      if typeof x is 'function'
+        x.apply @, args
+
+  # inspired by https://gist.github.com/padolsey/6008842
+  $$interpolate: do ->
+    rc = 
+      '\n': '\\n'
+      '"': '\"'
+      '\u2028': '\\u2028'
+      '\u2029': '\\u2029'
+    (str) ->
+      new Function('o', 'return "' + str.replace(/["\n\r\u2028\u2029]/g, ($0) ->
+        rc[$0]
+      ).replace(/\{([\s\S]+?)\}/g, '" + o["$1"] + "') + '";')
 
 class ConveyorBase extends ConveyorUtil
-  _setDefaults: (base, opts)->
+  $$apply: (fn,args)->
+    @[fn].apply @, args
+  $$call: (fn,args...)->
+    @[fn].apply @, args
+  $$setDefaults: (base, opts)->
     if typeof opts is 'object'
       for x of opts
         base[x] = opts[x];

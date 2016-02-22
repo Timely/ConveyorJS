@@ -2,7 +2,7 @@ class ConveyorBelt
   constructor: (data,transformers,direction)->
     @promise = new ConveyorPromise
     @data = data
-    @transformers = transformers
+    @transformers = transformers instanceof Array && transformers || [transformers]
     @direction = direction || 'apply'
     @pos = -1
     @status = -1
@@ -14,7 +14,7 @@ class ConveyorBelt
     @pos++
     @status = 0
     if @pos < @transformers.length
-      @transformers[@pos]["$#{@direction}"] @data, this
+      @transformers[@pos]["$#{@direction}"] @data, @
     else
       @status = 1
       @promise.resolve data

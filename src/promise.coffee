@@ -8,6 +8,7 @@ class ConveyorPromise
       @executor = null
     @resolvers = []
     @rejecters = []
+    @$list = []
     @next = null
     @status = 0
     @value = null
@@ -53,6 +54,7 @@ class ConveyorPromise
     return promise
   resolve: (value)->
     if @status isnt 0
+      console.error 'test'
       throw "This promise is already #{@status is -1 && 'rejected' || 'resolved'}. Cannot resolve."
     @value = value
     @status = 1
