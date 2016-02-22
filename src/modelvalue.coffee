@@ -85,6 +85,20 @@ class ConveyorValue.Number extends ConveyorValueCore
       return @next value.raw
     value.exception "Cannot convert `#{value.raw}` to a number."
   
+class ConveyorValue.Currency extends ConveyorValueCore
+  @onApply (value)->
+    if typeof value.raw is 'boolean'
+      return @next value.raw && 1 || 0
+    if typeof value.raw is 'string'
+      if value.raw.length is 0
+        return @next 0
+      if value.raw.match(/[^0-9$%#,.\s\r\n]/g)
+        value.raw.exception "Cannot convert `#{value.raw}` to a number."
+      return @next parseFloat value.raw.replace(/[^0-9\.]/g, '')
+    if value.raw instanceof Number or typeof value.raw is 'number'
+      return @next value.raw
+    value.exception "Cannot convert `#{value.raw}` to a number."
+  
 
 class ConveyorValue.Boolean extends ConveyorValueCore
   @onApply (value)->

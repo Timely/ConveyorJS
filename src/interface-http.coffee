@@ -28,7 +28,7 @@ class ConveyorHttpInterface extends ConveyorInterface
 
   save: (data, conf)->
     promise = new ConveyorPromise
-    ConveyorBelt.run(data, @listTransformers,'publish').then (data)=>
+    ConveyorBelt.run(data, @transformers,'publish').then (data)=>
       params = ConveyorUtil.extend {}, data, conf.params
       path = @$$path('save')(params)
       console.info data
@@ -43,7 +43,7 @@ class ConveyorHttpInterface extends ConveyorInterface
 
   create: (data, conf)->
     promise = new ConveyorPromise
-    ConveyorBelt.run(data, @listTransformers,'publish').then (data)=>
+    ConveyorBelt.run(data, @transformers,'publish').then (data)=>
       params = ConveyorUtil.extend {}, data, conf.params
       path = @$$path('create')(params)
       console.info 'creating with', data
