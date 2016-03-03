@@ -12,6 +12,8 @@ class ConveyorUtil
     if typeof def is 'object'
       return def
     return {}
+  @escapeRegex = (s) ->
+    String(s).replace(/([-()\[\]{}+?*.$\^|,:#<!\\])/g, '\\$1').replace /\x08/g, '\\x08'
   $$arrayForEach: (a,cb)->
     if not Array.isArray a
       throw "$arrayForEach expects an array, given: #{typeof a}"
@@ -24,11 +26,13 @@ class ConveyorUtil
     @__eventHandlers[ev].push handler
 
   $trigger: (ev, args...)->
+    # console.log 'trying event',ev,@__eventHandlers
     if not @__eventHandlers?
       return
     if not @__eventHandlers[ev]?
       return
     for x in @__eventHandlers[ev]
+      console.log 'forwarding event',ev
       if typeof x is 'function'
         x.apply @, args
 

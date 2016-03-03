@@ -1,28 +1,34 @@
 class ConveyorFacade
   $$transformer: null
+  $dirty: false
   constructor: (@$model, transformer)->
     @$$transformer = Conveyor.getTransformer transformer
-    @$$apply()
-  $$apply: ->
-    for key of @$model.data
+    @$apply()
+  $apply: ->
+    for key of @$model.fields
       @[key] = @$model.get key
       if @[key] instanceof ConveyorModel
         @[key] = new ConveyorFacade @[key]
     if @$$transformer
       ConveyorBelt.run @, @$$transformer, 'apply'
+    @$dirty = @$model.$isDirty()
     @
 
   $commit: ->
     for key of @
       continue if key.indexOf('$') is 0
+      continue if key is 'constructor'
       @$model.set key, @[key]
+    do @$apply # run this in case the model has changed based of the committed values
   $save: (opts)->
-    @$commit()
+    do @$commit
     @$model.save(opts).then =>
-      @$$apply()
+      do @$apply
   $delete: ->
-    @$model.remove()
-    # apply changes made to object to model
+    do @$model.remove
+  $reset: ->
+    do @$model.reset
+    do @$apply
 
 
 (exports ? this).ConveyorFacade = ConveyorFacade

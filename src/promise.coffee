@@ -104,13 +104,15 @@ class ConveyorPromise
 
     for promise,i in arr
       promise.then incr,incr
+      
+    do complete if arr.length is 0
     return agp
     
   _forward: (value)->
     if value instanceof ConveyorPromise
       value.then (success)=>
         @resolve success
-      , (err)->
+      , (err)=>
         @reject err
     else
       # console.info 'forwarding',@,value

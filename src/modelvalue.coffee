@@ -1,16 +1,39 @@
 class ConveyorValueCore
   @transformers = []
-  constructor: (raw, @model, @conf)->
+  $init:null
+  immutable:false
+  forced:false
+  nullable:true
+  empty_value:null
+  constructor: (raw, @key, @model, @conf,force=true)->
+    if @conf.immutable
+      @immutable = true
+    if @conf.nullable?
+      @nullable = @conf.nullable
+    if @conf.empty_value isnt undefined
+      @empty_value = @conf.empty_value
     @current = null
     @dirty = false
     @saved = false
     @errors = []
     @history = []
-    @$apply raw, true
+    @$apply(raw, force).then =>
+      if typeof @$init is 'function'
+        @$init()
   get: -> @current
 
-  set: (value)->
-    @$apply value
+  set: (value,force=false)->
+    @$apply value,force
+  reset: ->
+    if @dirty and @history.length > 1 and @forced
+      @$apply @history[0], true
+    else
+      @$apply null, true
+
+  undo: ->
+    if @dirty and @history.length > 1
+      @$apply @history[@history.length - 1], true
+
 
   @onApply: (fn)->
     tr = Conveyor.Transformer fn
@@ -28,20 +51,39 @@ class ConveyorValueCore
 
 
   $apply: (value, force=false)->
+    if @immutable and not force and @history.length
+      return ConveyorPromise.reject()
+    if force
+      @forced = true
+    if value is null
+      if not @nullable and @empty_value isnt null
+        value = @empty_value
+      else if not @nullable
+        throw "#{@key} cannot be set to null"
     @raw = value
     original = @current
-    # console.info '$apply',value,@constructor.transformers
-    ConveyorBelt.run(@, @constructor.transformers,'apply').then (value)=>
+    cb = (value)=>
       if value instanceof ConveyorValueCore
         @current = value.raw
       else
         @current = value
       if !force && @current isnt original
         @dirty = true
+        @history.push original
+        @model.$trigger "change:#{@key}", @
+        # console.info 'triggered',"change:#{@key}",original,@current
       if force
         @dirty = false
-    , (err)->
-      @exception err
+        @history = []
+        @model.$trigger "change:#{@key}", @
+        # console.info 'triggered',"change:#{@key}"
+      @
+    if value is null
+      ConveyorPromise.resolve cb null
+    else
+      ConveyorBelt.run(@, @constructor.transformers,'apply').then cb
+      , (err)->
+        @exception err
 
   $publish: ()->
     # console.info '$publish',@current
@@ -60,6 +102,7 @@ class ConveyorValueCore
 
 ConveyorValue = {}
 class ConveyorValue.String extends ConveyorValueCore
+  empty_value:''
   @onApply (value)->
     if typeof value.raw is 'string'
       return @next value.raw
@@ -72,6 +115,7 @@ class ConveyorValue.String extends ConveyorValueCore
     value.exception("ConveyorValue.String - Cannot convert value to string.")
 
 class ConveyorValue.Number extends ConveyorValueCore
+  empty_value:0
   @onApply (value)->
     if typeof value.raw is 'boolean'
       return @next value.raw && 1 || 0
@@ -86,9 +130,8 @@ class ConveyorValue.Number extends ConveyorValueCore
     value.exception "Cannot convert `#{value.raw}` to a number."
   
 class ConveyorValue.Currency extends ConveyorValueCore
+  empty_value:0
   @onApply (value)->
-    if typeof value.raw is 'boolean'
-      return @next value.raw && 1 || 0
     if typeof value.raw is 'string'
       if value.raw.length is 0
         return @next 0
@@ -101,6 +144,7 @@ class ConveyorValue.Currency extends ConveyorValueCore
   
 
 class ConveyorValue.Boolean extends ConveyorValueCore
+  empty_value:false
   @onApply (value)->
     if typeof value.raw is 'boolean'
       return @next value.raw
@@ -113,11 +157,46 @@ class ConveyorValue.Boolean extends ConveyorValueCore
       return @next value.raw isnt 0 && true || false
     value.exception "Cannot convert `#{value.raw}` to a boolean."
 
+class ConveyorValue.Raw extends ConveyorValueCore
+
 class ConveyorValue.Model extends ConveyorValueCore
-  @onApply (value)->
+  immutable: true
+  $init: ->
+    if @conf.on
+      @model.$on "change:#{@conf.on}", (value)=>
+        # console.log "run change:#{@conf.on}"
+        @$apply value.get(), true
+  @onApply (value,pipe)->
+    if value.conf.on
+      ref = value.model.get value.conf.on
     if typeof value.raw is 'object'
-      return @next new value.conf.model value.raw
+      nm = value.conf.model.sync value.raw
+      if value.conf.on and not ref
+        value.model.set value.conf.on, nm.getPrimaryKey()
+      return @next nm
+    if typeof value.raw is 'number'
+      if value.current instanceof ConveyorModel
+        if value.current.getPrimaryKey() isnt value.raw
+          value.conf.model.get(value.raw).then (model)=>
+            console.warn model
+            @next model
+          , (err)->
+            throw err
+          return
+        else
+          return @next value.current
+      else
+        value.conf.model.get(value.raw).then (model)=>
+          @next model
+        , (err)->
+          throw err
+        return
+        # return @next new value.conf.model value.raw
     @next value.raw
+  @onPublish (value)->
+    if value.current instanceof ConveyorModel
+      return @next value.current.getPrimaryKey()
+    @next value.current
 
 class ConveyorModelValueException
   constructor: (@message,@value)->

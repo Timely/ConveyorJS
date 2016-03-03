@@ -1,9 +1,18 @@
 class ConveyorBelt
-  constructor: (data,transformers,direction)->
+  constructor: (data,transformers,direction,conf)->
     @promise = new ConveyorPromise
     @data = data
-    @transformers = transformers instanceof Array && transformers || [transformers]
+    @extra = ConveyorUtil.obj conf
+    tmp = transformers instanceof Array && transformers || [transformers]
     @direction = direction || 'apply'
+    # resort array without affecting the original array
+    if @direction is 'publish'
+      rtmp = []
+      for i in tmp by -1
+        rtmp.push i
+      tmp = rtmp
+      
+    @transformers = tmp
     @pos = -1
     @status = -1
     @error = false
@@ -33,8 +42,8 @@ class ConveyorBelt
     @transformers.push transformer
     @
 
-  @run: (d,t,dd)->
-    (new ConveyorBelt d,t,dd).promise
+  @run: (d,t,dd,conf)->
+    (new ConveyorBelt d,t,dd,conf).promise
   @thread: (arr,t,dd)->
     promises = []
     for d in arr
