@@ -23,6 +23,21 @@ class ConveyorModel extends ConveyorBase
     # console.log @
     @sync(data)
 
+  fetch: (opts)->
+    if opts?.tmp?
+      tmp = ConveyorUtil.obj opts.tmp
+      delete opts.tmp
+    else
+      tmp = {}
+    opts = ConveyorUtil.extend {}, @conf, opts
+    t_opts = ConveyorUtil.extend {}, opts, tmp
+    data = @$publish(opts.changed_only && true || false)
+    console.info 'fetch opts',t_opts, @conf
+    if @getPrimaryKey()
+      @allInterfaces('fetch', data, t_opts).then (data)=>
+        @sync data[0], opts
+    else
+      throw "Cannot reload without a primary key"
   save: (opts)->
     if opts?.tmp?
       tmp = ConveyorUtil.obj opts.tmp
@@ -92,7 +107,7 @@ class ConveyorModel extends ConveyorBase
     if not @index["#{@name}_#{pk}"]?
       return @index["#{@name}_#{pk}"] = new @$self data, conf
     else
-      return @index["#{@name}_#{pk}"].sync data
+      return @index["#{@name}_#{pk}"].sync data, conf
   sync: (data,opts)->
     data = ConveyorUtil.obj data
     ConveyorUtil.extend @conf, opts
@@ -123,6 +138,11 @@ class ConveyorModel extends ConveyorBase
       else
         out[key] = @data[key].$publish()
     out
+  val: (key)->
+    if @data[key]
+      return @data[key]
+    else
+      return null
   get: (key)->
     if @data[key]
       return @data[key].get()
@@ -160,6 +180,12 @@ class ConveyorModel extends ConveyorBase
     me = @
     arr.$facade = (tr)->
       out = []
+
+      out.$json = ->
+        rout = []
+        for x in @
+          rout.push x.$json()
+        rout
       for i in @
         out.push new me.facade i, tr
       out

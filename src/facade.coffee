@@ -20,9 +20,20 @@ class ConveyorFacade
       continue if key is 'constructor'
       @$model.set key, @[key]
     do @$apply # run this in case the model has changed based of the committed values
+  $json: ->
+    out = {}
+    for key of @
+      continue if key.indexOf('$') is 0
+      continue if key is 'constructor'
+      out[key] = @[key]
+    out
   $save: (opts)->
     do @$commit
     @$model.save(opts).then =>
+      do @$apply
+  $fetch: (opts)->
+    do @$commit
+    @$model.fetch(opts).then =>
       do @$apply
   $delete: ->
     do @$model.remove

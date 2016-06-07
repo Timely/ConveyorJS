@@ -37,6 +37,18 @@ class ConveyorHttpInterface extends ConveyorInterface
       promise.reject err
     promise
 
+  fetch: (data,conf)->
+    conf = ConveyorUtil.obj conf
+    params = ConveyorUtil.extend {}, data, conf.params
+    promise = new ConveyorPromise
+    path = @$$path('fetch', conf.custom_path && conf.custom_path || false)(params)
+    @$$req('get', path, ConveyorUtil.obj(conf.data), conf.queue || null).then (data)=>
+      ConveyorBelt.run(data, @transformers,'apply').then promise
+    , (xhr,status,err)->
+      console.log 'abort error',err
+      promise.reject err
+    promise
+
   save: (data, conf)->
     promise = new ConveyorPromise
     ConveyorBelt.run(data, @transformers,'publish',conf).then (data)=>

@@ -49,6 +49,8 @@ class ConveyorValueCore
     else
       @transformers = [tr]
 
+  $diff: (a,b)->
+    return a isnt b
 
   $apply: (value, force=false)->
     if @immutable and not force and @history.length
@@ -67,7 +69,7 @@ class ConveyorValueCore
         @current = value.raw
       else
         @current = value
-      if !force && @current isnt original
+      if !force && @$diff @current, original
         @dirty = true
         @history.push original
         @model.$trigger "change:#{@key}", @
@@ -123,7 +125,7 @@ class ConveyorValue.Number extends ConveyorValueCore
       if value.raw.length is 0
         return @next 0
       if value.raw.match(/[^0-9$%#,.\s\r\n]/g)
-        value.raw.exception "Cannot convert `#{value.raw}` to a number."
+        value.exception "Cannot convert `#{value.raw}` to a number."
       return @next parseFloat value.raw.replace(/[^0-9\.]/g, '')
     if value.raw instanceof Number or typeof value.raw is 'number'
       return @next value.raw
@@ -136,7 +138,7 @@ class ConveyorValue.Currency extends ConveyorValueCore
       if value.raw.length is 0
         return @next 0
       if value.raw.match(/[^0-9$%#,.\s\r\n]/g)
-        value.raw.exception "Cannot convert `#{value.raw}` to a number."
+        value.exception "Cannot convert `#{value.raw}` to a number."
       return @next parseFloat value.raw.replace(/[^0-9\.]/g, '')
     if value.raw instanceof Number or typeof value.raw is 'number'
       return @next value.raw
