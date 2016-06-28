@@ -35,6 +35,8 @@ class ConveyorFacade
     do @$commit
     @$model.fetch(opts).then =>
       do @$apply
+    , ->
+      console.info 'Facade fetch failed'
   $delete: ->
     do @$model.remove
   $reset: ->

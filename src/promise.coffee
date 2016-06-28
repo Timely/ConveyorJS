@@ -34,7 +34,7 @@ class ConveyorPromise
     if @status is 1 && success
       return @_next success.call @, @value
     if @status is -1 && fail
-      return @_next fail.call @, @value
+      return @_next fail.call(@, @value), true
     return @
   catch: (fail)->
     if @status is -1 && fail
@@ -71,7 +71,7 @@ class ConveyorPromise
     for fn in @rejecters
       r = fn.call @, value
       if fn.$promise?
-        fn.$promise._forward r
+        fn.$promise._forward r, true
     @
   run: (excecutor)->
     if typeof executor is 'function'
@@ -96,6 +96,8 @@ class ConveyorPromise
           out.push promise.value
         else
           errors.push promise.value
+
+      console.info "completing aggregate with #{errors.length} errors and #{out.length} good"
       if errors.length and not out.length
         return agp.reject errors
       if errors.length and strict
@@ -104,26 +106,31 @@ class ConveyorPromise
 
     for promise,i in arr
       promise.then incr,incr
-      
+
     do complete if arr.length is 0
     return agp
-    
-  _forward: (value)->
+
+  _forward: (value, fail = false)->
     if value instanceof ConveyorPromise
       value.then (success)=>
         @resolve success
       , (err)=>
         @reject err
     else
-      # console.info 'forwarding',@,value
-      @resolve value
+      if fail
+        @reject value
+      else
+        @resolve value
 
-  _next: (value)->
+  _next: (value, fail = false)->
     # console.log '_next',value
     if value instanceof ConveyorPromise
       return value
     else
-      return ConveyorPromise.resolve value
+      if fail
+        return ConveyorPromise.reject value
+      else
+        return ConveyorPromise.resolve value
 
 
 (exports ? this).ConveyorPromise = ConveyorPromise

@@ -7,8 +7,6 @@ class ConveyorHttpInterface extends ConveyorInterface
       transformers: []
       listTransformers: []
     , options
-  fetch: ()->
-    # 
   remove: (data, conf)->
     promise = new ConveyorPromise
     params = ConveyorUtil.extend {}, data, conf.params
@@ -45,7 +43,7 @@ class ConveyorHttpInterface extends ConveyorInterface
     @$$req('get', path, ConveyorUtil.obj(conf.data), conf.queue || null).then (data)=>
       ConveyorBelt.run(data, @transformers,'apply').then promise
     , (xhr,status,err)->
-      console.log 'abort error',err
+      console.log 'abort error!',err
       promise.reject err
     promise
 
@@ -82,7 +80,7 @@ class ConveyorHttpInterface extends ConveyorInterface
       return @$$interpolate custom_path
     if typeof @endpoint is 'object'
       if @endpoint[method]?
-        out = @endpoint[method] 
+        out = @endpoint[method]
       else if ['remove','save'].indexOf(@endpoint[method]) isnt -1 and @endpoint['fetch']?
         out = @endpoint['fetch']
       else if method is 'create' and @endpoint['list']?

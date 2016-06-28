@@ -36,6 +36,8 @@ class ConveyorModel extends ConveyorBase
     if @getPrimaryKey()
       @allInterfaces('fetch', data, t_opts).then (data)=>
         @sync data[0], opts
+      , ->
+        console.log 'Failed fetching'
     else
       throw "Cannot reload without a primary key"
   save: (opts)->
@@ -54,7 +56,7 @@ class ConveyorModel extends ConveyorBase
       @allInterfaces('create', data, t_opts).then (data)=>
         @sync data[0], opts
   remove: (opts)->
-    opts = ConveyorUtil.extend {}, @conf, opts 
+    opts = ConveyorUtil.extend {}, @conf, opts
     data = @$publish(opts.changed_only && true || false)
     if @getPrimaryKey()
       @allInterfaces('remove', data, opts).then (data)=>
