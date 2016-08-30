@@ -37,7 +37,7 @@ class ConveyorModel extends ConveyorBase
       @allInterfaces('fetch', data, t_opts).then (data)=>
         @sync data[0], opts
       , ->
-        console.log 'Failed fetching'
+        # console.log 'Failed fetching'
     else
       throw "Cannot reload without a primary key"
   save: (opts)->

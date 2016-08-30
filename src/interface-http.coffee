@@ -43,7 +43,7 @@ class ConveyorHttpInterface extends ConveyorInterface
     @$$req('get', path, ConveyorUtil.obj(conf.data), conf.queue || null).then (data)=>
       ConveyorBelt.run(data, @transformers,'apply').then promise
     , (xhr,status,err)->
-      console.log 'abort error!',err
+      # console.log 'abort error!',err
       promise.reject err
     promise
 

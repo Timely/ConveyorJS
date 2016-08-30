@@ -30,7 +30,7 @@ class EventModel extends ConveyorModel
 # window.EventModel = EventModel
 
 EventModel.list(before:new Date).then (v)->
-  console.log 'data'
+  # console.log 'data'
   window.test = v[0]
 , (err)->
   console.error err

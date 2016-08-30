@@ -55,7 +55,6 @@
   EventModel.list({
     before: new Date
   }).then(function(v) {
-    console.log('data');
     return window.test = v[0];
   }, function(err) {
     return console.error(err);

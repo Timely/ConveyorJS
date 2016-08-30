@@ -32,13 +32,13 @@ class ConveyorUtil
     if not @__eventHandlers[ev]?
       return
     for x in @__eventHandlers[ev]
-      console.log 'forwarding event',ev
+      # console.log 'forwarding event',ev
       if typeof x is 'function'
         x.apply @, args
 
   # inspired by https://gist.github.com/padolsey/6008842
   $$interpolate: do ->
-    rc = 
+    rc =
       '\n': '\\n'
       '"': '\"'
       '\u2028': '\\u2028'
